@@ -17,7 +17,7 @@ options(repos = c(CRAN = "https://cloud.r-project.org/"))
 # Step 2: List the required packages
 # --------------------------------------------------
 # We will create a vector of package names for easy management.
-required_packages <- c("rinat", "httr", "knitr", "rmarkdown")
+required_packages <- c("rinat", "httr", "knitr", "rmarkdown", "lubridate", "leaflet", "scales")
 
 # --------------------------------------------------
 # Step 3: Check and install missing packages
@@ -53,5 +53,10 @@ installed.packages()[required_packages, "LibPath"]
 # - httr: Perform HTTP requests for API access.
 # - knitr: Create dynamic reports.
 # - rmarkdown: Convert R scripts to HTML, PDF, or Word documents.
+# - lubridate: working with time data
+# - leaflet: create interative maps
+# - scales: colour scales and ramps
+
 
 message("All packages are successfully installed and loaded. You are ready to proceed!")
+
