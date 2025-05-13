@@ -13,6 +13,16 @@ library(rinat)
 library(httr)
 library(lubridate)
 
+# Set Working Directory
+# --------------------------------------------------
+# Make sure your working directory is set to the 'natbioblitz2025_data_training' project root folder**, 
+# not the 'Scripts' subfolder. Use getwd() to check:
+getwd()
+
+# If needed, set it manually:
+# setwd("your_path/to/natbioblitz2025_data_training")
+# Or use the RStudio top menu - go to 'Session' and 'Set Working Directory' - then 'Choose Directory'
+
 # --------------------------------------------------
 
 # Step 1: Load the Exported Dataset
@@ -20,7 +30,6 @@ library(lubridate)
 # --------------------------------------------------
 
 # Set the file path to the exported dataset
-
 file_path <- "data/observations-569743.csv"
 
 # Read the CSV file
@@ -109,7 +118,7 @@ research_grade_data <- subset(inat_data, quality_grade == "research")
 
 nrow(research_grade_data)
 
-# Filter by date range (e.g., records from 1st to 12th May)
+# Filter by date range (e.g., records from 1st onwards)
 
 may_records <- subset(inat_data, time_observed_at >= as_datetime("2025-05-01"))
 
