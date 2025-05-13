@@ -74,7 +74,7 @@ cat("Last update:", as.character(last_update), "\n")
 new_records <- subset(inat_data, !id %in% exported_data$id )
 cat("Number of new records since export:", nrow(new_records), "\n")
 
-browseURL(sample(new_records$uri, 1))
+browseURL(sample(new_records$uri, 1)) #check one out
 
 updated_records <- subset(inat_data, updated_at > max(exported_data$updated_at) 
                           & id %in% exported_data$id)
@@ -146,6 +146,8 @@ browseURL(default_beadlet_image) #default image for this species
 # Load the non-native species list
 
 non_native_species <- read.csv("data/UK marine NNS.csv")
+
+View(non_native_species)
 
 # Match observations against non-native species list
 
