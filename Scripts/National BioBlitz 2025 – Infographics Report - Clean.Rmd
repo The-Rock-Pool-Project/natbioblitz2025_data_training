@@ -4,7 +4,7 @@ author: "The Rock Pool Project"
 output: 
   pdf_document:
     latex_engine: xelatex
-fontsize: 8pt
+fontsize: 10pt
 mainfont: Montserrat
 sansfont: Montserrat
 monofont: Courier New
