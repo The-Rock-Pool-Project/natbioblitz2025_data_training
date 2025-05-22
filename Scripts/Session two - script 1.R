@@ -81,7 +81,7 @@ showtext_auto()
 # Create the dataset with three summary metrics and corresponding icons
 summary_data <- data.frame(
   label = c("observers", "records", "Species"),  # Labels for the metrics
-  value = c(23, 695, 195),                       # Actual numbers to display
+  value = c(n_observers, n_recs, n_sp),                       # Actual numbers to display
   icon = c("icons/people.png",                  # Path to PNG icons (must exist)
            "icons/clipboard.png",
            "icons/crab.png")
