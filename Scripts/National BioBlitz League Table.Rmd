@@ -1,0 +1,188 @@
+---
+title: "National BioBlitz 2025 – League Tables"
+author: "The Rock Pool Project"
+output: html_document
+fontsize: 10pt
+mainfont: Montserrat
+sansfont: Montserrat
+monofont: Courier New
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+```
+
+## League Tables – National BioBlitz 2025
+
+This report showcases three league tables based on iNaturalist data from the National BioBlitz 2025. Each table highlights different aspects of participant contributions and biodiversity findings, filtered to include only high-quality, research-grade records.
+
+All data have been cleaned, filtered, and scored according to the methods outlined in earlier training sessions.
+
+## 1. League Table: Research-Grade Records
+
+This table ranks participants based solely on the number of **research-grade observations** they submitted. Research-grade records meet iNaturalist's standard for community verification, meaning they have:
+
+ - A valid species-level ID,
+ - A date, time, and location,
+ - At least two confirming identifications.
+
+This provides a simple but reliable measure of participation and data quality, which is particularly important when a competition is involved.
+
+
+```{r data}
+#load the latest data
+saved_data_path <- "../NatBioBlitz_iNat.RData"
+
+if (file.exists(saved_data_path)) {
+  load(saved_data_path)
+} else {
+  source("scripts/new get project obs function.R")
+  NatBioBlitz_iNat <- get_inat_obs_project_v2("brpc-national-bioblitz-2025")
+  save(NatBioBlitz_iNat, file = saved_data_path)
+}
+```
+
+```{r league1}
+#subset to research grade and species level observations only:
+
+NatBioBlitz_iNat_RG <- subset(NatBioBlitz_iNat, quality_grade == "research" & taxon.rank == "species")
+
+#create league
+library(tidyverse)
+
+league_table1 <- NatBioBlitz_iNat_RG %>%
+  group_by(user.login) %>%
+  summarise(
+    total_records = n(),
+    total_species = n_distinct(taxon.name[taxon.rank == "species"])
+  ) %>%
+  arrange(desc(total_species))
+
+#create names vector
+all_users <- subset(NatBioBlitz_iNat, !duplicated(NatBioBlitz_iNat$user.login))
+
+all_users_names <- all_users$user.name
+names(all_users_names) <- all_users$user.login
+
+all_users_names[is.na(all_users_names) | all_users_names == ""] <- all_users$user.login[is.na(all_users_names) | all_users_names == "" ]
+
+# add to data table
+NatBioBlitz_iNat$user <- all_users_names[NatBioBlitz_iNat$user.login]
+
+
+#use these names in the league table
+
+league_table1$user.login <- all_users_names[league_table1$user.login]
+
+#fix column heading 1
+
+names(league_table1)[1] <- "Observer"
+
+library(kableExtra)
+
+kable(league_table1, caption = "National BioBlitz League Table – Research Grade only")
+
+```
+
+## 2. League Table: Total Species Rarity Score
+
+In this version of the league table, each species has been assigned a **rarity-based score**. Rarer species contribute more points to a participant’s total, encouraging both participation and biodiversity exploration.
+
+Scores have been applied only to **species-level, research-grade records**. The total score for each participant reflects the sum of all scored observations they contributed.
+
+This approach helps to highlight users who observed uncommon or under-recorded marine life.
+
+
+```{r species_scores}
+#get species scores
+load("../Data/Latest_UK_Species_Scores.RData")
+
+sp_scores <- UK_N_obs$Score
+names(sp_scores) <- as.character(UK_N_obs$id)
+
+#add scores to iNat data
+NatBioBlitz_iNat$Score <- sp_scores[as.character(NatBioBlitz_iNat$taxon.id)]
+
+#if species level observation not have a score, give is zero unless it's Research grade then give it a 20
+NatBioBlitz_iNat$Score[
+  is.na(NatBioBlitz_iNat$Score) &
+  NatBioBlitz_iNat$taxon.rank == "species" &
+  NatBioBlitz_iNat$quality_grade == "research"
+] <- 20
+
+# double the scores for the non-native species
+# Load the non-native species list
+
+non_native_species <- read.csv("../Data/UK marine NNS.csv")
+
+NatBioBlitz_iNat$Score[NatBioBlitz_iNat$taxon.id %in% non_native_species$inat_id] <- NatBioBlitz_iNat$Score[NatBioBlitz_iNat$taxon.id %in% non_native_species$inat_id] * 2
+
+#recreate RG subset
+NatBioBlitz_iNat_RG <- subset(NatBioBlitz_iNat, quality_grade == "research" & taxon.rank == "species")
+
+
+league_table2 <- NatBioBlitz_iNat_RG %>%
+  group_by(user.login) %>%
+  summarise(
+    total_records = n(),
+    total_species = n_distinct(taxon.name[taxon.rank == "species"]),
+    total_score = sum(Score, na.rm = TRUE)
+  ) %>%
+  arrange(desc(total_score))
+
+#use real names in the league table where available
+league_table2$user.login <- all_users_names[league_table2$user.login]
+
+#fix column heading 1
+
+names(league_table2)[1] <- "Observer"
+
+
+kable(league_table2, caption = "National BioBlitz League Table – Rarity Scores")
+
+
+```
+
+## 3. League Table: Top Species per Observer
+
+This table shows each observer's **single highest-scoring species**. It celebrates individual record highlights and lets us explore which rare or notable species were captured by whom.
+
+It’s a useful way to recognise standout contributions, especially when observers find something unique—even if they only submitted a few records overall.
+
+```{r league3}
+league_table3 <- NatBioBlitz_iNat_RG %>%
+  group_by(user.login) %>%
+  summarise(
+    max_score = max(Score, na.rm = TRUE)
+  ) %>%
+  arrange(desc(max_score))
+
+league_table3$Common <- NA
+league_table3$Scientific <- NA
+
+
+for (observer in league_table3$user.login) {
+  obs_dat <- subset(NatBioBlitz_iNat_RG, user.login == observer)
+  obs_best_sp <- subset(obs_dat, Score == max(Score))
+  
+  #just in case there are more than one
+  obs_best_sp <- obs_best_sp[sample(1:nrow(obs_best_sp),1),]
+  
+  #add to table
+  league_table3$Common[league_table3$user.login == observer] <- obs_best_sp$taxon.preferred_common_name
+  
+  league_table3$Scientific[league_table3$user.login == observer] <- obs_best_sp$taxon.name
+}
+
+#use real names in the league table where available
+league_table3$user.login <- all_users_names[league_table3$user.login]
+
+#fix column heading 1
+
+names(league_table3)[1] <- "Observer"
+
+
+kable(league_table3, caption = "National BioBlitz League Table – Max Rarity Score")
+
+
+```
