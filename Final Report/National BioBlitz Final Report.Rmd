@@ -1,0 +1,668 @@
+---
+output:
+  pdf_document:
+    latex_engine: xelatex
+    includes:
+      in_header: report-header.tex
+fontsize: 10pt
+mainfont: Montserrat
+sansfont: Chivo
+monofont: Courier New
+geometry: a4paper, top=30mm, bottom=20mm, left=20mm, right=20mm
+urlcolor: blue
+---
+
+\begin{center}
+
+{\sffamily\fontsize{28pt}{34pt}\selectfont \textbf{Big Rock Pool Challenge}}
+
+\end{center}
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  warning = FALSE,
+  message = FALSE,
+  fig.align = "center",
+  fig.width = 8,
+  fig.height = 5
+)
+
+library(ggplot2)
+library(dplyr)
+library(showtext)
+library(ggtext)
+library(ggimage)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(knitr)
+
+# Fonts for plots
+font_add_google("Montserrat", "mont")
+font_add_google("Chivo", "chivo")
+showtext_auto()
+```
+
+```{r data_load}
+load("NatBioBlitz_iNat20250604.RData") #iNat BioBlitz Data as of 4th June 2025
+
+```
+
+\begin{center}
+\includegraphics[width=0.8\textwidth]{images/natbioadvert.png}
+
+{\sffamily\fontsize{24pt}{30pt}\selectfont \textbf{BioBlitz Report}}
+
+\includegraphics[width=0.8\textwidth]{images/BRPC Funders and Partner logos.png}
+\end{center}
+
+\newpage
+
+
+
+## Executive Summary
+
+A brief overview of the National BioBlitz 2025: aims, reach, and key achievements. Include highlights and a general snapshot of participation.
+
+\newpage
+
+
+
+# About the National BioBlitz
+
+The [National BioBlitz 2025](https://www.therockpoolproject.co.uk/national-bioblitz) was a UK-wide citizen science initiative coordinated by The Rock Pool Project, aimed at engaging people across the country in discovering and recording the biodiversity of our rocky shores.
+
+Held between 17th and 25th May 2025, the event empowered individuals, families, and wildlife groups to take part in a shared national effort to explore intertidal habitats and contribute meaningful data to marine research and conservation.
+
+Participants of all ages and backgrounds visited their local coastlines to record the species they found in rock pools and along the shore. Whether seasoned naturalists or first-time explorers, everyone played a role in helping to build a clearer picture of the UK's marine life.
+
+## Data collection
+
+All observations were recorded using [iNaturalist](https://www.inaturalist.org/), a free, community-powered biodiversity recording platform. Participants submitted photographs of their finds, along with the date and location of each observation. These were automatically grouped into a dedicated project: the [National BioBlitz 2025 iNaturalist page](https://www.inaturalist.org/projects/brpc-national-bioblitz-2025), which captured all qualifying submissions made during the event period.
+
+Species identifications were suggested by participants and verified through the iNaturalist community and The Rock Pool Project’s team of marine biologists. This process helped ensure data quality while also offering an accessible learning experience for participants.
+
+The resulting data set represents a unique, community-generated snapshot of intertidal biodiversity across the UK — supporting long-term research and helping to track changes in species distributions, including the spread of marine non-natives.
+
+
+
+# Results
+The 2025 National BioBlitz brought together an inspiring community of nature enthusiasts, families, schools, and volunteers to explore the UK’s rocky shores. 
+
+```{r overall-summary-plot1}
+# Infographic One - data summary
+
+## first save the latest summary data
+## How many records?
+n_recs <- nrow(NatBioBlitz_iNat)
+
+## How many observers?
+observers <- unique(NatBioBlitz_iNat$user.login)
+
+n_observers <- length(observers)
+
+#how many species
+
+sp_dat <- subset(NatBioBlitz_iNat, taxon.rank == "species")
+
+sp_list <- unique(sp_dat$taxon.name)
+
+n_sp <- length(sp_list)
+
+# Load required libraries
+library(ggplot2)    # Core plotting library
+library(ggtext)     # Allows rich text (e.g. markdown) in plot titles and labels
+library(ggimage)    # Enables image placement inside ggplots
+library(showtext)   # Allows use of custom fonts (e.g. Google Fonts)
+
+# Load the RPP Google Font "Montserrat" and name it "mont" in R
+font_add_google("Montserrat", "mont")
+
+# Activate showtext so custom fonts are rendered in plots
+showtext_auto()
+
+# Create the dataset with three summary metrics and corresponding icons
+summary_data <- data.frame(
+  label = c("observers", "records", "Species"),  # Labels for the metrics
+  value = c(n_observers, n_recs, n_sp),                       # Actual numbers to display
+  icon = c("icons/people.png",                  # Path to PNG icons (must exist)
+           "icons/clipboard.png",
+           "icons/crab.png")
+)
+
+# Create formatted labels using HTML-style markup
+summary_data$label_combined <- paste0(
+  "<b>", format(summary_data$value, big.mark = ","), "<br>",
+  summary_data$label, "</b>"
+)
+
+plot1 <- ggplot(summary_data, aes(x = label, y = 1)) +
+  geom_image(aes(image = icon, y = 0.82), size = 0.4) +
+
+  geom_richtext(
+    aes(y = 0.63, label = label_combined),
+    family = "mont",
+    fill = NA, label.color = NA,  # Transparent background
+    size = 10,
+    lineheight = 1,
+    hjust = 0.5
+  ) +
+
+  coord_cartesian(ylim = c(0.55, 0.9)) +
+  theme_void(base_family = "mont") +
+  theme(
+    plot.margin = margin(5, 10, 5, 10)
+  )
+
+
+# Draw the plot to the file
+plot1
+
+```
+
+These headline figures highlight both the breadth of public engagement and the diversity of marine life encountered across the country’s intertidal zones. Each record contributes to a growing national dataset that supports long-term marine monitoring, biodiversity research, and the detection of non-native species. 
+
+## Geographical Coverage
+
+```{r geo_coverage}
+# Convert 'location' column into latitude and longitude
+# ------------------------------
+# 'location' field is a string like "50.12,-5.06" – we split it into two numbers
+location_split <- strsplit(NatBioBlitz_iNat$location, ",")
+location_df <- do.call(rbind, lapply(location_split, function(x) as.numeric(x)))
+colnames(location_df) <- c("latitude", "longitude")  # Label the columns
+
+# Add these new lat/lon values to the main dataset
+NatBioBlitz_iNat <- cbind(NatBioBlitz_iNat, location_df)
+
+# Remove any rows that failed to convert properly
+NatBioBlitz_iNat <- NatBioBlitz_iNat %>%
+  filter(!is.na(latitude), !is.na(longitude))
+
+# Convert the data frame to a spatial object
+obs_points <- st_as_sf(NatBioBlitz_iNat, coords = c("longitude", "latitude"), crs = 4326)
+
+# ------------------------------
+# Load a background map of the UK and Ireland
+# ------------------------------
+uk_map <- ne_countries(scale = "medium", returnclass = "sf") %>%
+  filter(admin %in% c("United Kingdom", "Ireland"))  # Keep only UK and Ireland
+
+# ------------------------------
+# Create the map plot
+# ------------------------------
+plot2 <- ggplot() +
+  geom_sf(data = uk_map, fill = "whitesmoke", colour = "grey50") +       # Draw base map
+  geom_sf(data = obs_points, colour = "#0B6EF5", size = 5, alpha = 0.7) + # Plot observation points
+  coord_sf(xlim = c(-11, 3), ylim = c(48.5, 61), expand = FALSE) +       # Zoom to UK
+  labs(title = "Locations of National BioBlitz Observations (2025)") +   # Plot title
+  theme_void(base_family = "mont") +                                     # Minimal theme with font
+  theme(
+    plot.title = element_text(
+      family = "chivo", size = 16, hjust = 0.5,
+      margin = margin(t = 10, b = 10)
+    ),
+    plot.margin = margin(10, 10, 10, 10)
+  )
+
+plot2
+
+```
+The map above shows the wide distribution of observations submitted during the 2025 National BioBlitz. From the remote shores of Shetland to the rocky coasts of Cornwall, participants across the UK came together to record marine life from their local intertidal habitats.
+
+This nationwide coverage reflects the strength of our community-led approach — with contributions from both established hubs and brand-new participants, including schools, wildlife groups, and families exploring their nearby coastline.
+
+The broad spread of data not only captures regional variation in species distributions, but also enhances the national value of the dataset — helping us build a clearer picture of the UK's marine biodiversity in a time of environmental change.
+
+## Taxonomic Coverage
+
+```{r taxo_coverage}
+# Load the lookup table for iconic taxa
+RPP_iconic_taxa <- read.csv("BRPC_iconic_taxa.csv", stringsAsFactors = FALSE)
+RPP_iconic_taxa$iNat_code <- as.character(RPP_iconic_taxa$iNat_code)
+
+# Create a named vector to map ancestry codes to taxon names
+taxon_lookup <- setNames(RPP_iconic_taxa$Common, RPP_iconic_taxa$iNat_code)
+
+# Define a function to search each ancestry string and return the first matching label
+get_iconic_label <- function(ancestry_str) {
+  ids <- unlist(strsplit(ancestry_str, "/"))
+  match <- taxon_lookup[ids]
+  label <- match[!is.na(match)][1]
+  if (is.na(label)) "Other" else label
+}
+
+# Apply the function to all records
+NatBioBlitz_iNat$iconic_taxon <- vapply(NatBioBlitz_iNat$taxon.ancestry, get_iconic_label, character(1))
+
+# ------------------------------
+# Count records by iconic taxon
+# ------------------------------
+iconic_counts <- NatBioBlitz_iNat %>%
+  count(iconic_taxon, name = "n") %>%
+  arrange(desc(n))
+
+# Updated brand colour palette including algae groups
+brand_colours <- c(
+  "Crustaceans" = "#535C7D",     # Soft Grey
+  "Red seaweed"    = "#DA3737",    # 
+  "Green seaweed"  = "#D1F4FF",    # Crest Foam
+  "Brown seaweed"  = "#FDBD19",    # Golden Shore
+  "Molluscs"     = "#00A6FB",    # Ocean Spark
+  "Fishes"         = "#4D56F5",    # Deep Blue (additional)
+  "Sea anemones"   = "#FF9895",    # Coral tone
+  "Echinoderms"  = "#FFDDA3",    # Pale Orange
+  "Sponges"      = "#A3C4F3",    # Soft Blue
+  "Worms"        = "#FFC0BF", #Soft Rose Shell
+  "Sea squirts"  = "#2176FF",    # Tidal Blue
+  "Other"        = "#191D2D"     # Midnight Tide (neutral)
+)
+
+# Ensure factor order matches
+iconic_counts$iconic_taxon <- factor(iconic_counts$iconic_taxon, levels = names(brand_colours))
+
+
+# ------------------------------
+# Create the bar plot
+# ------------------------------
+plot3 <- ggplot(iconic_counts, aes(x = reorder(iconic_taxon, n), y = n, fill = iconic_taxon)) +
+  geom_col(show.legend = FALSE) +
+  coord_flip() +
+  labs(
+    title = "National BioBlitz Records by Rock Pool Iconic Taxa",
+    x = NULL,
+    y = "Number of Records"
+  ) +
+  scale_fill_manual(values = brand_colours) +
+  theme_minimal(base_family = "mont") +
+  theme(
+    plot.title = element_text(family = "chivo", size = 16, face = "bold", hjust = 0.5, margin = margin(b = 15)),
+    axis.text.x = element_text(size = 14),
+    axis.text.y = element_text(size = 14),
+    axis.title.x = element_text(size = 16),
+    plot.margin = margin(t = 20, r = 30, b = 30, l = 30)
+  )
+
+plot3
+
+```
+
+\newpage
+
+## Best finds
+
+
+```{r best_finds}
+#add rarity scores
+load("../Data/Latest_UK_Species_Scores.RData")
+
+sp_scores <- UK_N_obs$Score
+names(sp_scores) <- as.character(UK_N_obs$id)
+
+#add scores to iNat data
+NatBioBlitz_iNat$Score <- sp_scores[as.character(NatBioBlitz_iNat$taxon.id)]
+
+#if species level observation not have a score, give is zero unless it's Research grade then give it a 20
+NatBioBlitz_iNat$Score[
+  is.na(NatBioBlitz_iNat$Score) &
+  NatBioBlitz_iNat$taxon.rank == "species" &
+  NatBioBlitz_iNat$quality_grade == "research"
+] <- 20
+
+# double the scores for the non-native species
+# Load the non-native species list
+
+non_native_species <- read.csv("../Data/UK marine NNS.csv")
+
+NatBioBlitz_iNat$Score[NatBioBlitz_iNat$taxon.id %in% non_native_species$inat_id] <- NatBioBlitz_iNat$Score[NatBioBlitz_iNat$taxon.id %in% non_native_species$inat_id] * 2
+
+
+NatBioBlitz_iNat$NNS <- NatBioBlitz_iNat$taxon.id %in% non_native_species$inat_id
+
+#best native finds
+NatBioBlitz_iNat_N <- subset(NatBioBlitz_iNat, !NNS & quality_grade == "research")
+NatBioBlitz_iNat_N <- NatBioBlitz_iNat_N[order(NatBioBlitz_iNat_N$Score, decreasing = T),]
+
+NatBioBlitz_iNat_N_best <- subset(NatBioBlitz_iNat_N, Score == max(Score, na.rm = T))
+
+#best non-native finds
+NatBioBlitz_iNat_NNS <- subset(NatBioBlitz_iNat, NNS & quality_grade == "research")
+NatBioBlitz_iNat_NNS <- NatBioBlitz_iNat_NNS[order(NatBioBlitz_iNat_NNS$Score, decreasing = T),]
+
+NatBioBlitz_iNat_NNS_best <- subset(NatBioBlitz_iNat_NNS, Score >= 10)
+
+
+```
+
+
+### Native species
+
+We found some amazing species. These were the highest ranked according to our rarity points:
+
+```{r best_native_recs, results='asis'}
+#get photos
+dir.create("images/best_native", showWarnings = FALSE)
+
+for (i in 1:nrow(NatBioBlitz_iNat_N_best)) {
+  
+  url <- NatBioBlitz_iNat_N_best$observation_photos[[i]][1,]$photo.url
+  
+  #switch to medium image
+  url <- gsub("square", "medium", url)
+  
+  if(!NatBioBlitz_iNat_N_best$license_code[[i]] %in% c("", "All Rights Reserved") | is.na(NatBioBlitz_iNat_N_best$license_code[[i]])){
+  
+  if (!is.na(url) && nzchar(url)) {
+    filename <- paste0("images/best_native/native_", i, ".jpg")
+    
+    if(!filename %in% list.files("images/best_native")){
+    download.file(url, destfile = filename, mode = "wb")
+    NatBioBlitz_iNat_N_best$local_photo[i] <- filename  
+    }
+    
+  } else {
+    NatBioBlitz_iNat_N_best$local_photo[i] <- NA
+  }
+  }else{
+    NatBioBlitz_iNat_N_best$local_photo[i] <- "License not available"
+  }
+}
+
+
+# Loop through and print markdown for each record
+for (i in 1:nrow(NatBioBlitz_iNat_N_best)) {
+  rec <- NatBioBlitz_iNat_N_best[i, ]
+  
+  cat("\n\n")
+  
+  # Start minipage block (centered)
+  cat("\\begin{center}\n")
+  cat("\\begin{minipage}{0.9\\textwidth}\n")
+  
+  # Add image (sized down for PDF)
+  if (rec$local_photo != "") {
+    cat(sprintf("\\begin{center}\\includegraphics[height=6cm]{%s}\\end{center}\n\n", rec$local_photo))
+  }
+  
+  # Print species and observation details
+  if(!is.na(rec$taxon.preferred_common_name)){
+  cat(sprintf("\\textbf{%s} \\textit{(%s)}\\\\\n", 
+              rec$taxon.preferred_common_name, rec$taxon.name))
+  }else{
+    cat(sprintf("\\textbf{\\textit{%s}}\\\\\n", rec$taxon.name))
+  }
+  cat(sprintf("\\textbf{Rarity points:} %s\\\\\n", rec$Score))
+  cat(sprintf("\\textbf{Location:} %s\\\\\n", rec$place_guess))
+  
+  if(!is.na(rec$user.name)){
+    cat(sprintf("\\textbf{Observer:} %s\\\\\n", rec$user.name))
+  }else{
+    cat(sprintf("\\textbf{Observer:} %s\\\\\n", rec$user.login))
+  }
+  
+  
+  cat(sprintf("\\href{https://www.inaturalist.org/observations/%s}{View on iNaturalist}\\\\\n", rec$id))
+  
+    # Attribution if applicable
+  if (!is.na(rec$observation_photos[[1]]$photo.attribution[1])) {
+    cat(sprintf("\\textit{Photo licensed under CC-%s}\\\\\n", rec$observation_photos[[1]]$photo.attribution[1]))
+  }
+
+  # End minipage and add spacing
+  cat("\\end{minipage}\n")
+  cat("\\end{center}\n")
+  cat("\\vspace{10mm}\n\n")
+}
+
+```
+All of these records received a maximum rarity score of 20, which is awarded to records that were not on the UK species list as of November 2024 when we last updated our scoring system. All of these records have all been verified to Research Grade status on iNaturalist. N.B. some of the records here are based in the Channel Islands, which was included in the National Bioblitz but records from this region were not included when we created the rarity scoring system. It is possible these species are not as rare in the Channel Islands as they are in the UK.
+
+### Non-native species
+
+During National BioBlitz 2025 we had a specific focus on non-native species and encouraged people to record these species by doubling their rarity scores during the event. As a result, some of these records were also big scorers:
+
+```{r best_non_native_recs, results='asis'}
+#get photos
+dir.create("images/best_non-native", showWarnings = FALSE)
+
+for (i in 1:nrow(NatBioBlitz_iNat_NNS_best)) {
+  
+  url <- NatBioBlitz_iNat_NNS_best$observation_photos[[i]][1,]$photo.url
+  
+  #switch to medium image
+  url <- gsub("square", "medium", url)
+  
+  if(!NatBioBlitz_iNat_NNS_best$license_code[[i]] %in% c("", "All Rights Reserved") | is.na(NatBioBlitz_iNat_NNS_best$license_code[[i]])){
+  
+  if (!is.na(url) && nzchar(url)) {
+    filename <- paste0("images/best_non-native/native_", i, ".jpg")
+    
+    if(!filename %in% list.files("images/best_non-native")){
+    download.file(url, destfile = filename, mode = "wb")
+    NatBioBlitz_iNat_NNS_best$local_photo[i] <- filename  
+    }
+    
+  } else {
+    NatBioBlitz_iNat_NNS_best$local_photo[i] <- NA
+  }
+  }else{
+    NatBioBlitz_iNat_NNS_best$local_photo[i] <- "License not available"
+  }
+}
+
+
+# Loop through and print markdown for each record
+for (i in 1:nrow(NatBioBlitz_iNat_NNS_best)) {
+  rec <- NatBioBlitz_iNat_NNS_best[i, ]
+  
+  cat("\n\n")
+  
+  # Start minipage block (centered)
+  cat("\\begin{center}\n")
+  cat("\\begin{minipage}{0.9\\textwidth}\n")
+  
+  # Add image (sized down for PDF)
+  if (rec$local_photo != "") {
+    cat(sprintf("\\begin{center}\\includegraphics[height=6cm]{%s}\\end{center}\n\n", rec$local_photo))
+  }
+  
+  # Print species and observation details
+  if(!is.na(rec$taxon.preferred_common_name)){
+  cat(sprintf("\\textbf{%s} \\textit{(%s)}\\\\\n", 
+              rec$taxon.preferred_common_name, rec$taxon.name))
+  }else{
+    cat(sprintf("\\textbf{\\textit{%s}}\\\\\n", rec$taxon.name))
+  }
+  cat(sprintf("\\textbf{Rarity points:} %s\\\\\n", rec$Score))
+  cat(sprintf("\\textbf{Location:} %s\\\\\n", rec$place_guess))
+  
+  if(!is.na(rec$user.name)){
+    cat(sprintf("\\textbf{Observer:} %s\\\\\n", rec$user.name))
+  }else{
+    cat(sprintf("\\textbf{Observer:} %s\\\\\n", rec$user.login))
+  }
+  
+  
+  cat(sprintf("\\href{https://www.inaturalist.org/observations/%s}{View on iNaturalist}\\\\\n", rec$id))
+  
+    # Attribution if applicable
+  if (!is.na(rec$observation_photos[[1]]$photo.attribution[1])) {
+    cat(sprintf("\\textit{Photo licensed under CC-%s}\\\\\n", rec$observation_photos[[1]]$photo.attribution[1]))
+  }
+
+  # End minipage and add spacing
+  cat("\\end{minipage}\n")
+  cat("\\end{center}\n")
+  cat("\\vspace{10mm}\n\n")
+}
+
+```
+
+
+## Regional Summary
+
+\begin{center}
+\includegraphics[width=0.8\textwidth]{images/region map.png}
+\end{center}
+
+```{r region_breakdown}
+#load region details
+region_details <- read.csv("region names with inat codes.csv")
+
+get_region <- function(place_ids, region_codes, region_names) {
+  matched_index <- which(region_codes %in% place_ids)
+  if (length(matched_index) == 0) return(NA)
+  return(region_names[matched_index[1]])
+}
+
+# Map regions to each record
+NatBioBlitz_iNat$region <- sapply(
+  NatBioBlitz_iNat$place_ids,
+  get_region,
+  region_codes = region_details$iNat.code,
+  region_names = region_details$Database.name
+)
+
+reg_recs <- table(NatBioBlitz_iNat$region)
+reg_RG_recs <- table(subset(NatBioBlitz_iNat, quality_grade == "research")$region)
+
+library(dplyr)
+observer_counts <- NatBioBlitz_iNat %>%
+  distinct(region, user.login) %>%
+  count(region) 
+
+observer_counts <- observer_counts$n[!is.na(observer_counts$region)]
+
+reg_summary_tab <- data.frame("Region" = names(reg_recs),"Records" = as.vector(reg_recs), "Research Grade" = as.vector(reg_RG_recs), "Observers" = observer_counts)
+
+library(kableExtra)
+
+kable(format(reg_summary_tab, big.mark = ",", scientific = FALSE), col.names = gsub("\\."," ",names(reg_summary_tab))) %>%
+  kable_styling(bootstrap_options = "striped")
+
+no_reg_recs <- sum(is.na(NatBioBlitz_iNat$region))
+
+library(english)
+
+# Convert number to words with initial capital only
+x <- as.character(english(no_reg_recs))
+x <- gsub("-", " ", x)                    # Replace hyphen with space
+x <- paste(toupper(substring(x, 1, 1)), substring(x, 2), sep = "")  # Capitalise first letter only
+
+
+```
+
+`r x` records could not be assigned to a region.
+
+```{r reg_best_observers}
+#find best
+
+
+```
+
+
+
+```{r regional-plot-sw}
+# Placeholder for regional bar chart or map
+```
+
+\newpage
+
+# Individual Feedback (optional)
+
+Tailor info for a specific individual
+
+## Example User Summary
+
+- Total records: _X_
+- Species recorded: _Y_
+- Non-native species: _Z_
+
+top species
+
+```{r individual-feedback-example}
+# Placeholder for individual bar/tile chart
+```
+
+\newpage
+
+# Non-native Species Results
+
+## Summary from the National BioBlitz
+
+Overview of the non-native species found
+
+```{r nn-summary}
+# Placeholder for top non-native species chart
+```
+
+## Comparison with NBN Atlas Baseline
+
+ - Which species were found in unusual places?
+ - Which species weren't found in places they would be expected to be found?
+
+```{r nn-comparison}
+# Placeholder for before/after maps or bar charts
+```
+
+\newpage
+
+# Species Highlights
+
+- Rarest record
+- Best photo submission
+- Noteworthy range extension
+
+```{r highlights}
+# Placeholder for image collage or featured species panel
+```
+
+
+\newpage
+
+# Project Partners and Support
+
+Thank you to all our partners, volunteers, and funders.
+
+ADD PARTNER LOGOS HERE
+
+\newpage
+
+# Next Steps: How to Stay Involved
+
+## 1. Join or Start a Rock Pool Hub
+- Get involved locally or start your own hub with our support.
+
+## 2. Keep Recording on iNaturalist
+- Every observation adds to the UK marine picture.
+
+## 3. Seasonal Challenges
+- Look out for themed events and mini-BioBlitzes.
+
+## 4. Follow & Tag Us
+- Stay connected via social media: [@therockpoolproject](https://www.instagram.com/therockpoolproject)
+
+## 5. Volunteer or Collaborate
+- Run events, support schools, or partner with us.
+
+## 6. Sign Up for Updates
+- Visit [www.therockpoolproject.co.uk](https://www.therockpoolproject.co.uk)
+
+\newpage
+
+# Appendices
+
+## Species List
+
+```{r species-table}
+# Placeholder for table of all recorded species
+```
+
+## Methodology Notes
+
+Details on data collection, validation, and tools used.
+
+## Data Use Statement
+
+Explanation of how participant and observation data are used, stored, and shared.
