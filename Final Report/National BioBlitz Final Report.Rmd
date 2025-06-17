@@ -406,7 +406,7 @@ for (i in 1:nrow(NatBioBlitz_iNat_N_best)) {
   
     # Attribution if applicable
   if (!is.na(rec$observation_photos[[1]]$photo.attribution[1])) {
-    cat(sprintf("\\textit{Photo licensed under CC-%s}\\\\\n", rec$observation_photos[[1]]$photo.attribution[1]))
+    cat(sprintf("\\textit{Photo credit%s}\\\\\n", rec$observation_photos[[1]]$photo.attribution[1]))
   }
 
   # End minipage and add spacing
@@ -555,47 +555,180 @@ x <- paste(toupper(substring(x, 1, 1)), substring(x, 2), sep = "")  # Capitalise
 
 `r x` records could not be assigned to a region.
 
-```{r reg_best_observers}
-#find best
+```{r reg_best_observers, results='asis'}
+#find best surveyors for each region
+regions_with_data <- unique(NatBioBlitz_iNat$region)
+regions_with_data <- regions_with_data[!is.na(regions_with_data)]
 
+# Directory for highlight images
+dir.create("images/region_best_species", showWarnings = FALSE)
+
+for(reg in sort(regions_with_data)){
+  reg_data <- subset(NatBioBlitz_iNat, region == reg )
+  reg_RG_data <- subset(reg_data, quality_grade == "research" )
+  
+  reg_observers <- unique(reg_data$user.login)
+  
+  #get real names if available
+  reg_observers_names <- subset(reg_data, !duplicated(user.login))$user.name
+  names(reg_observers_names) <- subset(reg_data, !duplicated(user.login))$user.login
+  
+  reg_observers_names[is.na(reg_observers_names) | reg_observers_names == ""] <- names(reg_observers_names)[is.na(reg_observers_names) | reg_observers_names == ""]
+  
+  
+  reg_obs_recs <- table(reg_data$user.login)
+  reg_obs_RG_recs <- table(reg_RG_data$user.login)
+  
+  
+  #oberver stats
+  all_obs_Sp_num <- rep(0, length(reg_observers))
+  names(all_obs_Sp_num) <- reg_observers
+  
+  all_obs_recs <- all_obs_Sp_num
+  all_obs_RG_recs <- all_obs_Sp_num
+  all_obs_RG_Sp_num <- all_obs_Sp_num
+  all_obs_sp_list_score <- all_obs_Sp_num
+  all_obs_top_sp <- all_obs_Sp_num
+  all_obs_top_sp_score <- all_obs_Sp_num
+  
+  for (obs in reg_observers) {
+    obs_data <- subset(reg_data, taxon.rank == "species" & user.login == obs)
+    obs_RG_data <- subset(obs_data, quality_grade == "research")
+    
+    all_obs_recs[obs] <- nrow(obs_data)
+    all_obs_RG_recs[obs] <- nrow(obs_RG_data)
+    all_obs_Sp_num[obs] <- length(unique(obs_data$taxon.name))
+    all_obs_RG_Sp_num[obs] <- length(unique(obs_RG_data$taxon.name))
+    
+    #species list rarity score
+
+    all_obs_sp_list_score[obs] <- sum(subset(obs_RG_data, !duplicated(taxon.id))$Score)
+    
+    obs_top_Species_Dets <- subset(obs_RG_data[order(obs_RG_data$taxon.observations_count),], Score == max(Score))[1,]
+    
+    obs_top_species <- obs_top_Species_Dets$taxon.preferred_common_name
+    
+    if(is.na(obs_top_species)){
+      obs_top_species <- obs_top_Species_Dets$taxon.name
+    }
+    all_obs_top_sp[obs] <- obs_top_species
+    
+    all_obs_top_sp_score[obs] <- obs_top_Species_Dets$Score
+    
+  }
+  
+ reg_res <- data.frame("Observer" = reg_observers_names, "Records" = all_obs_recs, "RG" = all_obs_RG_recs, "Species" = all_obs_Sp_num, "RG_Species" = all_obs_RG_Sp_num, "Best Species" = all_obs_top_sp, "Best Species Score" =  all_obs_top_sp_score,"Total Rarity Score" = all_obs_sp_list_score) 
+  
+reg_res <- reg_res[order(reg_res$Total.Rarity.Score, decreasing = TRUE),]
+
+cat(sprintf("\\subsection*{%s Region Summary}\n\n", reg))
+
+print(
+  kable(head(reg_res), booktabs = TRUE, escape = TRUE, longtable = TRUE, row.names = FALSE, col.names = gsub("\\."," ",names(reg_res)), caption = paste("Top", reg, "Recorders.","RG = Research Grade. Rarity points based on Research Grade records only."),
+    caption.position = "bottom") %>%
+    kable_styling(latex_options = c("striped", "hold_position"), font_size = 8)
+)
+
+# Identify top rarity score(s)
+max_score <- max(reg_res$Total.Rarity.Score, na.rm = TRUE)
+top_winners <- reg_res$Observer[reg_res$Total.Rarity.Score == max_score]
+
+
+# Format winners as a sentence
+winner_text <- if (length(top_winners) == 1) {
+  sprintf("Congratulations to \\textbf{%s}, who recorded the highest rarity score and wins a Rock Pool Project T-shirt!", top_winners)
+} else {
+  winners_combined <- paste(rev(top_winners), collapse = " and ")
+  sprintf("Congratulations to \\textbf{%s}, who share the top rarity score and each win a Rock Pool Project T-shirt!", winners_combined)
+}
+
+# Output sentence in LaTeX
+cat(sprintf("\n\n%s\n\n", winner_text))
+
+reg_top_species <- subset(reg_RG_data, Score == max(Score))
+
+# Get highest scoring record(s)
+  top_score <- max(reg_RG_data$Score, na.rm = TRUE)
+  #order by total iNAt obs for the species - in case of draws
+  reg_RG_data <- reg_RG_data[order(reg_RG_data$taxon.observations_count),]
+  top_record <- subset(reg_RG_data, Score == top_score)[1, ]  # Take just one if tied
+
+  # Get photo URL (switch to medium)
+  url <- top_record$observation_photos[[1]]$photo.url[1]
+  url <- gsub("square", "medium", url)
+  
+    # Check license is acceptable
+  if (!top_record$license_code %in% c("", "All Rights Reserved") && !is.na(url)) {
+    filename <- paste0("images/region_best_species/", gsub(" ", "_", reg), ".jpg")
+    if (!file.exists(filename)) {
+      download.file(url, destfile = filename, mode = "wb")
+    }
+    top_record$local_photo <- filename
+  } else {
+    top_record$local_photo <- NA
+  }
+  
+  # Begin minipage
+  
+
+    cat("\\begin{minipage}{0.9\\textwidth}\n")
+    
+    #cat("\\\\[2em]\n")  # Equivalent spacing between lines
+
+
+  # Add image
+  if (!is.na(top_record$local_photo) && file.exists(top_record$local_photo)) {
+    cat(sprintf("\\begin{center}\\includegraphics[height=6cm]{%s}\\end{center}\n\n", top_record$local_photo))
+  }
+
+  # Caption with species name and observer
+  sp_name <- if (!is.na(top_record$taxon.preferred_common_name)) {
+    sprintf("\\textbf{%s} \\textit{(%s)}", top_record$taxon.preferred_common_name, top_record$taxon.name)
+  } else {
+    sprintf("\\textbf{\\textit{%s}}", top_record$taxon.name)
+  }
+
+  observer <- if (!is.na(top_record$user.name)) top_record$user.name else top_record$user.login
+
+  cat(sprintf("\\textbf{%s Region Highlight}\\newline\n", reg))
+  cat(sprintf("%s\\\\\n", sp_name))
+  cat(sprintf("\\textbf{Rarity points:} %s\\\\\n", top_record$Score))
+  cat(sprintf("\\textbf{Observer:} %s\\\\\n", observer))
+  cat(sprintf("\\textbf{Location:} %s\\\\\n", top_record$place_guess))
+  cat(sprintf("\\href{https://www.inaturalist.org/observations/%s}{View on iNaturalist}\\\\\n", top_record$id))
+
+  # Attribution
+  if (!is.na(top_record$observation_photos[[1]]$photo.attribution[1])) {
+    cat(sprintf("\\textit{Photo credit%s}\\\\\n", top_record$observation_photos[[1]]$photo.attribution[1]))
+  }
+  
+  cat("\\noindent\\rule{\\textwidth}{0.4pt}\n")  # full-width thin line
+
+  cat("\\end{minipage}\n")
+
+}
 
 ```
 
-
-
-```{r regional-plot-sw}
-# Placeholder for regional bar chart or map
-```
 
 \newpage
 
-# Individual Feedback (optional)
-
-Tailor info for a specific individual
-
-## Example User Summary
-
-- Total records: _X_
-- Species recorded: _Y_
-- Non-native species: _Z_
-
-top species
-
-```{r individual-feedback-example}
-# Placeholder for individual bar/tile chart
-```
-
-\newpage
 
 # Non-native Species Results
 
-## Summary from the National BioBlitz
-
-Overview of the non-native species found
 
 ```{r nn-summary}
-# Placeholder for top non-native species chart
+# How many NNS records and species?
+
+NatBioBlitz_iNat_NNS <- subset(NatBioBlitz_iNat, NNS) 
+
+
+
 ```
+
+## Summary from the National BioBlitz
+
+In total, `r nrow(NatBioBlitz_iNat_NNS)` non-native species records were collected, of which `r sum(NatBioBlitz_iNat_NNS$quality_grade == "research")` were validated to Research Grade status at the time of writing. These records covered a total of `r length(unique(NatBioBlitz_iNat_NNS$taxon.id))` different species.
 
 ## Comparison with NBN Atlas Baseline
 
